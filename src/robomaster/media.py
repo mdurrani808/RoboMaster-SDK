@@ -18,100 +18,25 @@ from . import conn
 from . import logger
 import threading
 import queue
-import subprocess
-import shutil
-import select
+import av
 import numpy
 import cv2
 
-def _check_ffmpeg():
-    if shutil.which("ffmpeg") is None:
-        raise EnvironmentError(
-            "ffmpeg executable not found on PATH. "
-            "Install it with: brew install ffmpeg (macOS) / "
-            "sudo apt install ffmpeg (Linux) / choco install ffmpeg (Windows)"
-        )
 
+class H264Decoder:
 
-class FFmpegH264Decoder:
-
-    def __init__(self, width=1280, height=720):
-        _check_ffmpeg()
-        self._width = width
-        self._height = height
-        self._process = None
-        self._lock = threading.Lock()
-        self._start()
-
-    def _start(self):
-        self._process = subprocess.Popen(
-            [
-                "ffmpeg",
-                "-loglevel", "error",
-                "-f", "h264",
-                "-i", "pipe:0",
-                "-f", "rawvideo",
-                "-pix_fmt", "bgr24",
-                "-an",
-                "pipe:1",
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=10 * 1024 * 1024,
-        )
+    def __init__(self):
+        self._codec = av.CodecContext.create('h264', 'r')
 
     def decode(self, data):
         frames = []
-        frame_size = self._width * self._height * 3
-
-        with self._lock:
-            if self._process is None or self._process.poll() is not None:
-                self._start()
-
-            try:
-                self._process.stdin.write(data)
-                self._process.stdin.flush()
-            except BrokenPipeError:
-                logger.warning("FFmpegH264Decoder: broken pipe, restarting")
-                self.close()
-                self._start()
-                return frames
-
-        while True:
-            raw = self._read_exact(frame_size, timeout=0.03)
-            if raw is None:
-                break
-            frame = numpy.frombuffer(raw, dtype=numpy.uint8).reshape(
-                (self._height, self._width, 3)
-            )
-            frames.append(frame)
-
+        for packet in self._codec.parse(data):
+            for frame in self._codec.decode(packet):
+                frames.append(frame.to_ndarray(format='bgr24'))
         return frames
 
-    def _read_exact(self, n, timeout=0.03):
-        try:
-            ready, _, _ = select.select([self._process.stdout], [], [], timeout)
-            if not ready:
-                return None
-            data = self._process.stdout.read(n)
-            if len(data) != n:
-                return None
-            return data
-        except Exception:
-            return None
-
     def close(self):
-        with self._lock:
-            if self._process and self._process.poll() is None:
-                try:
-                    self._process.stdin.close()
-                    self._process.terminate()
-                    self._process.wait(timeout=3)
-                except Exception:
-                    self._process.kill()
-                finally:
-                    self._process = None
+        self._codec.close()
 
 
 class LiveView(object):
@@ -158,9 +83,7 @@ class LiveView(object):
                 "Liveview: try to connect addr {0}, proto={1}".format(addr, ip_proto)
             )
             self._video_stream_conn.connect(addr, ip_proto)
-            self._video_decoder = FFmpegH264Decoder(
-                width=self._width, height=self._height
-            )
+            self._video_decoder = H264Decoder()
             self._video_streaming = True
             self._video_decoder_thread = threading.Thread(
                 target=self._video_decoder_task
