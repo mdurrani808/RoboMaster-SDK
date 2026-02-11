@@ -1,6 +1,6 @@
 [project]
 name = "robomaster"
-version = "1.0.0"
+version = "1.0.1"
 description = "RoboMaster Python SDK"
 readme = "README.md"
 dependencies = [
