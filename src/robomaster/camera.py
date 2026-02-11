@@ -15,7 +15,6 @@
 
 
 import numpy
-import audioop
 import wave
 import time
 from . import module
@@ -373,8 +372,11 @@ class EPCamera(module.Module, Camera):
 
             if sample_rate != 48000:
                 data = b''.join(frames)
-                converted = audioop.ratecv(data, 2, 1, 48000, sample_rate, None)
-                wf.writeframes(converted[0])
+                samples = numpy.frombuffer(data, dtype=numpy.int16).astype(numpy.float64)
+                num_output = int(len(samples) * sample_rate / 48000)
+                indices = numpy.linspace(0, len(samples) - 1, num_output)
+                resampled = numpy.interp(indices, numpy.arange(len(samples)), samples)
+                wf.writeframes(resampled.astype(numpy.int16).tobytes())
             wf.close()
         except Exception as e:
             logger.error("Camera: record_audio, exception {0}".format(e))

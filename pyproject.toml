@@ -1,0 +1,21 @@
+[project]
+name = "robomaster"
+version = "1.0.0"
+description = "RoboMaster Python SDK"
+readme = "README.md"
+dependencies = [
+    "av>=12.0.0",
+    "myqr>=2.3",
+    "netaddr>=0.8",
+    "netifaces>=0.1",
+    "numpy>=1.18",
+    "opencv-python-headless>=4.2",
+    "opuslib>=3.0.1",
+]
+maintainers = [
+  {name = "Mohammad Durrani", email = "mdurrani808@gmail.com"}
+]
+
+[build-system]
+requires = ["uv_build >= 0.10.0, <0.11.0"]
+build-backend = "uv_build"
